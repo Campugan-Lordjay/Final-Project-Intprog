@@ -1,6 +1,6 @@
 {
     "/api": {
-        "target": "https://your-backend-api.onrender.com",
+        "target": "https://final-project-intprog-evvu.onrender.com",
         "secure": true,
         "changeOrigin": true,
         "pathRewrite": {
