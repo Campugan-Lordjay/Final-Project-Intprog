@@ -1,11 +1,18 @@
 import { Component } from '@angular/core';
-import { RouterModule } from '@angular/router';
-import { CommonModule } from '@angular/common';
 
-@Component({
-  selector: 'app-layout',
-  templateUrl: './layout.component.html',
-  standalone: true,
-  imports: [RouterModule, CommonModule]
+@Component({ 
+    templateUrl: 'layout.component.html',
+    styles: [`
+        .admin-layout {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .admin-nav {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+    `]
 })
 export class LayoutComponent { }

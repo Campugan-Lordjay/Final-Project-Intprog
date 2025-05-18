@@ -4,153 +4,163 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { map, finalize } from 'rxjs/operators';
 
-import { environment } from '../../environments/environment';
-import { Account } from '../_models/account';
-import { Role } from '../_models/role';
+import { environment } from '@environments/environment';
+import { Account } from '@app/_models';
 
-const baseUrl = `${environment.apiUrl}`;
+const baseUrl = `${environment.apiUrl}/accounts`;
 
 @Injectable({ providedIn: 'root' })
 export class AccountService {
-  private accountSubject: BehaviorSubject<Account | null>;
-  public account: Observable<Account | null>;
+    private accountSubject: BehaviorSubject<Account>;
+    public account: Observable<Account>;
 
-  constructor(private router: Router, private http: HttpClient) {
-    // Initialize from localStorage if available
-    const storedAccount = localStorage.getItem('account');
-    this.accountSubject = new BehaviorSubject<Account | null>(storedAccount ? JSON.parse(storedAccount) : null);
-    this.account = this.accountSubject.asObservable();
-  }
-  
-  public get accountValue(): Account | null {
-    return this.accountSubject.value;
-  }
-  
-  private setAccount(account: Account | null) {
-    // Store in localStorage
-    if (account) {
-      localStorage.setItem('account', JSON.stringify(account));
-    } else {
-      localStorage.removeItem('account');
+    constructor(
+        private router: Router,
+        private http: HttpClient
+    ) {
+        // Load account from local storage if available
+        this.accountSubject = new BehaviorSubject<Account>(JSON.parse(localStorage.getItem('account')));
+        this.account = this.accountSubject.asObservable();
     }
-    // Update subject
-    this.accountSubject.next(account);
-  }
-  
-  login(email: string, password: string) {
-    return this.http.post<any>(`${baseUrl}/accounts/authenticate`, { email, password }, { withCredentials: true })
-      .pipe(map(account => {
-        console.log('Login response:', account);
-        // Ensure role is set correctly
-        if (account.role === 'Admin') {
-          account.role = Role.Admin;
-        } else if (account.role === 'User') {
-          account.role = Role.User;
+
+    public get accountValue(): Account {
+        return this.accountSubject.value;
+    }
+
+    login(email: string, password: string) {
+        return this.http.post<any>(`${baseUrl}/authenticate`, { email, password }, { withCredentials: true })
+            .pipe(map(account => {
+                // Store the account (with jwtToken) in local storage
+                localStorage.setItem('account', JSON.stringify(account));
+                this.accountSubject.next(account);
+                this.startRefreshTokenTimer();
+                return account;
+            }));
+    }
+
+    logout() {
+        // Clean up local state first
+        this.stopRefreshTokenTimer();
+        this.accountSubject.next(null);
+        localStorage.removeItem('account');
+
+        // Attempt to revoke the token, but don't wait for it
+        const refreshToken = this.getRefreshTokenFromCookie();
+        if (refreshToken) {
+            this.http.post<any>(`${baseUrl}/revoke-token`, { token: refreshToken }, { withCredentials: true })
+                .subscribe({
+                    error: (error) => {
+                        console.error('Error revoking token:', error);
+                    }
+                });
         }
-        console.log('Processed account:', account);
-        this.setAccount(account);
-        this.startRefreshTokenTimer();
-        return account;
-      }));
-  }
 
-  logout() {
-    this.http.post<any>(`${baseUrl}/accounts/revoke-token`, {}, { withCredentials: true }).subscribe();
-    this.stopRefreshTokenTimer();
-    this.setAccount(null);
-    this.router.navigate(['/accounts/login']);
-  }
+        // Navigate to login page
+        this.router.navigate(['/account/login']);
+    }
 
-  refreshToken() {
-    return this.http.post<any>(`${baseUrl}/accounts/refresh-token`, {}, { withCredentials: true })
-      .pipe(map((account) => {
-        console.log('Refresh token response:', account);
-        // Ensure role is set correctly
-        if (account.role === 'Admin') {
-          account.role = Role.Admin;
-        } else if (account.role === 'User') {
-          account.role = Role.User;
-        }
-        console.log('Processed account:', account);
-        this.setAccount(account);
-        this.startRefreshTokenTimer();
-        return account;
-      }));
-  }
+    // Helper to get refresh token from cookie
+    private getRefreshTokenFromCookie(): string | null {
+        const match = document.cookie.match(new RegExp('(^| )refreshToken=([^;]+)'));
+        return match ? match[2] : null;
+    }
 
-  register(account: Account) {
-    return this.http.post(`${baseUrl}/accounts/register`, account);
-  }
+    refreshToken() {
+        return this.http.post<any>(`${baseUrl}/refresh-token`, {}, { withCredentials: true })
+            .pipe(map(account => {
+                // Store the account (with jwtToken) in local storage
+                localStorage.setItem('account', JSON.stringify(account));
+                this.accountSubject.next(account);
+                this.startRefreshTokenTimer();
+                return account;
+            }));
+    }
 
-  verifyEmail(token: string) {
-    return this.http.post(`${baseUrl}/accounts/verify-email`, { token });
-  }
+    register(account: Account) {
+        return this.http.post(`${baseUrl}/register`, account);
+    }
 
-  forgotPassword(email: string) {
-    return this.http.post(`${baseUrl}/accounts/forgot-password`, { email });
-  }
+    verifyEmail(token: string) {
+        return this.http.post(`${baseUrl}/verify-email`, { token });
+    }
 
-  validateResetToken(token: string) {
-    return this.http.post(`${baseUrl}/accounts/validate-reset-token`, { token });
-  }
+    forgotPassword(email: string) {
+        return this.http.post(`${baseUrl}/forgot-password`, { email });
+    }
 
-  resetPassword(token: string, password: string, confirmPassword: string) {
-    return this.http.post(`${baseUrl}/accounts/reset-password`, { token, password, confirmPassword });
-  }
+    validateResetToken(token: string) {
+        return this.http.post(`${baseUrl}/validate-reset-token`, { token });
+    }
 
-  getAll() {
-    return this.http.get<Account[]>(`${baseUrl}/accounts`);
-  }
+    resetPassword(token: string, password: string, confirmPassword: string) {
+        return this.http.post(`${baseUrl}/reset-password`, { token, password, confirmPassword });
+    }
 
-  getById(id: string) {
-    return this.http.get<Account>(`${baseUrl}/accounts/${id}`);
-  }
+    getAll() {
+        return this.http.get<Account[]>(baseUrl, { withCredentials: true });
+    }
 
-  create(params: any) {
-    return this.http.post(`${baseUrl}/accounts`, params);
-  }
+    getById(id: string) {
+        return this.http.get<Account>(`${baseUrl}/${id}`, { withCredentials: true });
+    }
 
-  update(id: string, params: object) {
-    return this.http.put(`${baseUrl}/accounts/${id}`, params)
-      .pipe(map((account: any) => {
-        if (account.id === this.accountValue?.id) {
-          account = { ...this.accountValue, ...account };
-          this.accountSubject.next(account);
-        }
-        return account;
-      }));
-  }
+    create(params: any) {
+        return this.http.post(baseUrl, params, { withCredentials: true });
+    }
 
-  activate(id: string) {
-    return this.http.put(`${baseUrl}/accounts/${id}/activate`, {});
-  }
+    update(id, params) {
+        return this.http.put(`${baseUrl}/${id}`, params, { withCredentials: true })
+            .pipe(map((account: any) => {
+                // update the current account if it was updated
+                if (account.id === this.accountValue.id) {
+                    // publish updated account to subscribers
+                    account = { ...this.accountValue, ...account };
+                    this.accountSubject.next(account);
+                }
+                return account;
+            }));
+    }    
 
-  deactivate(id: string) {
-    return this.http.put(`${baseUrl}/accounts/${id}/deactivate`, {});
-  }
+    delete(id: string) {
+        return this.http.delete(`${baseUrl}/${id}`, { withCredentials: true })
+            .pipe(finalize(() => {
+                // auto logout if the logged in account was deleted
+                if (id === this.accountValue.id) 
+                    this.logout();
+            }));
+    }
 
-  delete(id: string) {
-    return this.http.delete(`${baseUrl}/accounts/${id}`)
-      .pipe(finalize(() => {
-        if (id === String(this.accountValue?.id)) {
-          this.logout();
-        }
-      }));
-  }
+    deactivateAccount(id: number) {
+        return this.http.put(`${baseUrl}/accounts/${id}/deactivate`, {}, { withCredentials: true });
+    }
+    
+    activateAccount(id: number) {
+        return this.http.put(`${baseUrl}/accounts/${id}/activate`, {}, { withCredentials: true });
+    }
+      
 
-  private refreshTokenTimeout: any;
+    // helper methods
 
-  private startRefreshTokenTimer() {
-    const jwtToken = this.accountValue?.jwtToken
-      ? JSON.parse(atob(this.accountValue.jwtToken.split('.')[1]))
-      : null;
+    private refreshTokenTimeout;
 
-    const expires = new Date(jwtToken.exp * 1000);
-    const timeout = expires.getTime() - Date.now() - (60 * 1000);
-    this.refreshTokenTimeout = setTimeout(() => this.refreshToken().subscribe(), timeout);
-  }
+    private startRefreshTokenTimer() {
+        // parse json object from base64 encoded jwt token
+        const jwtToken = JSON.parse(atob(this.accountValue.jwtToken.split('.')[1]));
 
-  private stopRefreshTokenTimer() {
-    clearTimeout(this.refreshTokenTimeout);
-  }
+        // set a timeout to refresh the token a minute before it expires
+        const expires = new Date(jwtToken.exp * 1000);
+        const timeout = expires.getTime() - Date.now() - (60 * 1000);
+        this.refreshTokenTimeout = setTimeout(() => {
+            this.refreshToken().subscribe({
+                error: () => {
+                    // If refresh token fails, logout
+                    this.logout();
+                }
+            });
+        }, timeout);
+    }
+
+    private stopRefreshTokenTimer() {
+        clearTimeout(this.refreshTokenTimeout);
+    }
 }

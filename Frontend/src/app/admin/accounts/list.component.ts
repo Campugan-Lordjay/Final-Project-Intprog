@@ -1,58 +1,76 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core'; 
 import { first } from 'rxjs/operators';
-import { AlertService } from '../../_services/alert.service';
-import { AccountService } from '../../_services/account.service';
+import { AccountService } from '@app/_services'; 
+import { Account } from '@app/_models';
 
-@Component({ templateUrl: 'list.component.html' })
-export class ListComponent implements OnInit {
-  accounts!: any[];
+@Component({ 
+  templateUrl: 'list.component.html' 
+}) 
 
-  constructor(
-    private accountService: AccountService,
-    private alertService: AlertService
-  ) { }
+export class ListComponent implements OnInit { 
+  accounts: any[] = [];
+
+  constructor(private accountService: AccountService) {}
 
   ngOnInit() {
-    this.loadAccounts(); // Load accounts on initialization
+    this.loadAccounts();
   }
 
   loadAccounts() {
-    this.accountService.getAll()
-      .pipe(first())
-      .subscribe(accounts => this.accounts = accounts);
-  }
-
-  activateAccount(id: string) {
-    this.accountService.activate(id).subscribe({
-      next: () => {
-        this.alertService.success('Account activated successfully'); // Show success message
-
-        // Update the account's isActive status in the frontend
-        const account = this.accounts.find(x => x.id === id);
-        if (account) {
-          account.isActive = true; // Set the account as active
-        }
-      },
-      error: error => {
-        this.alertService.error(error); // Show error message
-      }
+    this.accountService.getAll().subscribe(accounts => {
+      this.accounts = accounts.map(account => ({
+        ...account,
+        isDeactivating: false,
+        isActivating: false
+      }));
     });
   }
 
-  deactivateAccount(id: string) {
-    this.accountService.deactivate(id).subscribe({
-      next: () => {
-        this.alertService.success('Account deactivated successfully'); // Show success message
+  deleteAccount(id: string) {
+    const account = this.accounts.find(x => x.id === id); 
+    account.isDeleting = true; 
+    this.accountService.delete(id)
+        .pipe(first())
+        .subscribe(() => {
+            this.accounts = this.accounts.filter(x => x.id !== id);
+        });
+  }
 
-        // Update the account's isActive status in the frontend
-        const account = this.accounts.find(x => x.id === id);
-        if (account) {
-          account.isActive = false; // Set the account as inactive
-        }
-      },
-      error: error => {
-        this.alertService.error(error); // Show error message
-      }
-    });
+  deactivateAccount(id: number) {
+    const account = this.accounts.find(x => x.id === id);
+    if (account) {
+      account.isDeactivating = true;
+      this.accountService.deactivateAccount(id)
+        .pipe(first())
+        .subscribe({
+          next: () => {
+            account.isActive = false;
+            account.isDeactivating = false;
+          },
+          error: (error) => {
+            console.error('Error deactivating account:', error);
+            account.isDeactivating = false;
+          }
+        });
+    }
+  }
+
+  activateAccount(id: number) {
+    const account = this.accounts.find(x => x.id === id);
+    if (account) {
+      account.isActivating = true;
+      this.accountService.activateAccount(id)
+        .pipe(first())
+        .subscribe({
+          next: () => {
+            account.isActive = true;
+            account.isActivating = false;
+          },
+          error: (error) => {
+            console.error('Error activating account:', error);
+            account.isActivating = false;
+          }
+        });
+    }
   }
 }

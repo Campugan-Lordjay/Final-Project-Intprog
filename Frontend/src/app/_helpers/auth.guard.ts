@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { AccountService } from '../_services/account.service';
-import { Role } from '../_models/role';
+
+import { AccountService } from '@app/_services';
 
 @Injectable({ providedIn: 'root' })
 export class AuthGuard {
@@ -11,24 +11,26 @@ export class AuthGuard {
     ) { }
 
     canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
+        // Bypass authentication for admin routes
+        if (state.url.startsWith('/admin')) {
+            return true;
+        }
+
         const account = this.accountService.accountValue;
-        console.log('Auth Guard - Full Account Object:', JSON.stringify(account, null, 2));
-        console.log('Auth Guard - JWT Token:', account?.jwtToken);
-        console.log('Auth Guard - Role:', account?.role);
-        console.log('Auth Guard - Role.Admin:', Role.Admin);
-        
-        if (!account) {
-            console.log('Auth Guard - No account, redirecting to login');
-            this.router.navigate(['/accounts/login']);
-            return false;
+        if (account) {
+            // check if route is restricted by role
+            if (route.data.roles && !route.data.roles.includes(account.role)) {
+                // role not authorized so redirect to home page
+                this.router.navigate(['/']);
+                return false;
+            }
+
+            // authorized so return true
+            return true;
         }
-        // Check for admin role
-        if (account.role !== Role.Admin && state.url.includes('/admin')) {
-            console.log('Auth Guard - Not admin, redirecting to home');
-            this.router.navigate(['/']);
-            return false;
-        }
-        console.log('Auth Guard - Access granted');
-        return true;
+
+        // not logged in so redirect to login page with the return url
+        this.router.navigate(['/account/login'], { queryParams: { returnUrl: state.url }});
+        return false;
     }
 }

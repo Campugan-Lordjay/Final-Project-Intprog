@@ -1,21 +1,19 @@
 import { Role } from './role';
-export class Account {
-    id?: number;     // string or number
-    title?: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    role?: Role;
-    jwtToken?: string;
-    dateCreated?: string;
-    isVerified?: boolean;
-    refreshTokens: string[];
-    verificationToken?: string;
-    password?: string;
-    resetToken?: string; 
-    resetTokenExpires?: string;
 
-    constructor() {
-        this.refreshTokens = []; 
-    }
+export class Account {
+    id: string;
+    title: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: Role;
+    isActive: boolean; 
+    jwtToken?: string;
+
+    isActivating: boolean;
+    isDeactivating: boolean;
+
+    constructor(init?: Partial<Account>) {
+        Object.assign(this, init);
+    }  
 }
